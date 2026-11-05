@@ -1,0 +1,154 @@
+name: Trivy Security Gate
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      scan_target:
+        description: Select the Terraform test set
+        required: true
+        default: hardened
+        type: choice
+        options:
+          - hardened
+          - vulnerable
+
+permissions:
+  contents: read
+
+jobs:
+  trivy:
+    name: Trivy ${{ matrix.test_case }}
+    runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - test_case: TC01 Public SSH
+            vulnerable_file: terraform/vulnerable/01-open-ssh.tf
+            hardened_file: terraform/hardened/01-restricted-ssh.tf
+            check_ids: AWS-0107
+
+          - test_case: TC02 S3 Public Access
+            vulnerable_file: terraform/vulnerable/02-public-s3.tf
+            hardened_file: terraform/hardened/02-private-s3.tf
+            check_ids: AWS-0086,AWS-0087,AWS-0091,AWS-0093
+
+          - test_case: TC03 S3 KMS Encryption
+            vulnerable_file: terraform/vulnerable/03-sse-s3.tf
+            hardened_file: terraform/hardened/03-kms-s3.tf
+            check_ids: AWS-0132
+
+          - test_case: TC04 EBS Encryption
+            vulnerable_file: terraform/vulnerable/04-unencrypted-ebs.tf
+            hardened_file: terraform/hardened/04-encrypted-ebs.tf
+            check_ids: AWS-0026
+
+          - test_case: TC05 IMDSv2
+            vulnerable_file: terraform/vulnerable/05-imdsv1-enabled.tf
+            hardened_file: terraform/hardened/05-imdsv2-required.tf
+            check_ids: AWS-0028
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Install Trivy
+        uses: aquasecurity/setup-trivy@v0.3.1
+        with:
+          version: v0.76.1
+          cache: true
+
+      - name: Select Terraform test file
+        id: target
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REQUESTED_TARGET: ${{ inputs.scan_target }}
+          VULNERABLE_FILE: ${{ matrix.vulnerable_file }}
+          HARDENED_FILE: ${{ matrix.hardened_file }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] &&
+             [ "$REQUESTED_TARGET" = "vulnerable" ]; then
+            SELECTED_FILE="$VULNERABLE_FILE"
+            SCAN_TARGET="vulnerable"
+          else
+            SELECTED_FILE="$HARDENED_FILE"
+            SCAN_TARGET="hardened"
+          fi
+
+          echo "file=$SELECTED_FILE" >> "$GITHUB_OUTPUT"
+          echo "target=$SCAN_TARGET" >> "$GITHUB_OUTPUT"
+
+          echo "Scan target: $SCAN_TARGET"
+          echo "Selected file: $SELECTED_FILE"
+
+          test -f "$SELECTED_FILE"
+
+      - name: Display Trivy scan results
+        shell: bash
+        env:
+          SELECTED_FILE: ${{ steps.target.outputs.file }}
+        run: |
+          trivy config "$SELECTED_FILE"
+
+      - name: Generate Trivy JSON report
+        shell: bash
+        env:
+          SELECTED_FILE: ${{ steps.target.outputs.file }}
+        run: |
+          trivy config \
+            --format json \
+            --output trivy-results.json \
+            "$SELECTED_FILE"
+
+      - name: Evaluate targeted security checks
+        shell: bash
+        env:
+          SCAN_TARGET: ${{ steps.target.outputs.target }}
+          CHECK_IDS: ${{ matrix.check_ids }}
+        run: |
+          IFS=',' read -ra TARGET_IDS <<< "$CHECK_IDS"
+          MATCH_COUNT=0
+
+          echo "Targeted Trivy checks: $CHECK_IDS"
+
+          for CHECK_ID in "${TARGET_IDS[@]}"; do
+            COUNT=$(jq \
+              --arg id "$CHECK_ID" \
+              '[.Results[]?.Misconfigurations[]? |
+              select(.ID == $id)] | length' \
+              trivy-results.json)
+
+            if [ "$COUNT" -gt 0 ]; then
+              echo "::error::Detected targeted misconfiguration $CHECK_ID"
+              MATCH_COUNT=$((MATCH_COUNT + COUNT))
+            else
+              echo "No finding detected for $CHECK_ID"
+            fi
+          done
+
+          echo "Targeted findings detected: $MATCH_COUNT"
+
+          if [ "$SCAN_TARGET" = "vulnerable" ]; then
+            if [ "$MATCH_COUNT" -gt 0 ]; then
+              echo "::error::Vulnerable Terraform configuration blocked."
+              exit 1
+            else
+              echo "::error::Expected vulnerable finding was not detected."
+              exit 2
+            fi
+          fi
+
+          if [ "$MATCH_COUNT" -gt 0 ]; then
+            echo "::error::Hardened configuration still contains a targeted finding."
+            exit 1
+          fi
+
+          echo "Hardened Terraform configuration passed the Trivy security gate."
