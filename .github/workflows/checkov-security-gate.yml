@@ -64,30 +64,41 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
-      - name: Select Terraform test file
-        id: target
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install Checkov
+        run: pip install checkov==3.4.3
+
+      - name: Select and scan Terraform test file
         shell: bash
         env:
-          SCAN_TARGET: ${{ github.event.inputs.scan_target || 'hardened' }}
+          EVENT_NAME: ${{ github.event_name }}
+          REQUESTED_TARGET: ${{ inputs.scan_target }}
           VULNERABLE_FILE: ${{ matrix.vulnerable_file }}
           HARDENED_FILE: ${{ matrix.hardened_file }}
+          CHECK_ID: ${{ matrix.check_id }}
         run: |
-          if [ "$SCAN_TARGET" = "vulnerable" ]; then
+          if [ "$EVENT_NAME" = "workflow_dispatch" ] &&
+             [ "$REQUESTED_TARGET" = "vulnerable" ]; then
             SELECTED_FILE="$VULNERABLE_FILE"
+            SCAN_TARGET="vulnerable"
           else
             SELECTED_FILE="$HARDENED_FILE"
+            SCAN_TARGET="hardened"
           fi
 
-          echo "file=$SELECTED_FILE" >> "$GITHUB_OUTPUT"
-          echo "Selected target: $SCAN_TARGET"
+          echo "Scan target: $SCAN_TARGET"
           echo "Selected file: $SELECTED_FILE"
+          echo "Targeted check: $CHECK_ID"
 
-      - name: Run targeted Checkov security scan
-        uses: bridgecrewio/checkov-action@v12.1347.0
-        with:
-          file: ${{ steps.target.outputs.file }}
-          framework: terraform
-          check: ${{ matrix.check_id }}
-          quiet: false
-          compact: true
-          soft_fail: false
+          test -f "$SELECTED_FILE"
+
+          checkov \
+            -f "$SELECTED_FILE" \
+            --framework terraform \
+            --check "$CHECK_ID" \
+            --compact
