@@ -25,14 +25,21 @@ resource "aws_security_group" "baseline" {
   vpc_id      = aws_vpc.project.id
 
   egress {
-    description = "Permit outbound HTTPS traffic"
+    description = "Permit internal HTTPS traffic within the project VPC"
     from_port   = 443
     to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["10.10.0.0/16"]
   }
 
   tags = {
     Name = "cp-project-baseline-sg"
+  }
+}
+resource "aws_default_security_group" "restricted" {
+  vpc_id = aws_vpc.project.id
+
+  tags = {
+    Name = "cp-project-restricted-default-sg"
   }
 }
