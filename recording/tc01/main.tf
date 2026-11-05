@@ -1,19 +1,25 @@
-resource "aws_security_group" "open_ssh" {
-  #checkov:skip=CKV2_AWS_5:Standalone test fixture; security-group attachment is demonstrated in the baseline
-
-  name        = "tc01-open-ssh"
-  description = "Intentionally vulnerable security group for TC01"
+terraform {
+  required_providers {
+    aws = {
+      source  = "hashicorp/aws"
+      version = "~> 6.0"
+    }
+  }
+}
+resource "aws_security_group" "tc01_demo" {
+  name        = "tc01-public-ssh-demo"
+  description = "Demonstration security group for TC01"
 
   ingress {
-    description = "SSH access open to the internet"
+    description = "Restricted Administrative Access"
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = ["203.0.113.10/32"]
   }
 
   tags = {
-    Name     = "tc01-open-ssh"
+    Name     = "tc01-public-ssh-demo"
     TestCase = "TC01"
   }
 }
