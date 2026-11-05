@@ -29,3 +29,8 @@ reports/*.sarif
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Microsoft Office temporary files
+~$*.docx
+~$*.xlsx
+~$*.pptx

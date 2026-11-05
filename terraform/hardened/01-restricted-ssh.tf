@@ -1,4 +1,6 @@
 resource "aws_security_group" "restricted_ssh" {
+  #checkov:skip=CKV2_AWS_5:Standalone test fixture; security-group attachment is demonstrated in the baseline
+
   name        = "tc01-restricted-ssh"
   description = "Hardened security group for TC01"
 
@@ -14,10 +16,4 @@ resource "aws_security_group" "restricted_ssh" {
     Name     = "tc01-restricted-ssh"
     TestCase = "TC01"
   }
-}
-resource "aws_security_group" "restricted_ssh" {
-  #checkov:skip=CKV2_AWS_5:Standalone test fixture; security-group attachment is demonstrated in the baseline
-
-  name        = "tc01-restricted-ssh"
-  description = "Hardened security group for TC01"
 }
