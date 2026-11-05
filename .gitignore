@@ -1,0 +1,31 @@
+# Terraform working files
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.tfstate.lock.info
+crash.log
+crash.*.log
+
+# Potentially sensitive variable files
+*.tfvars
+*.tfvars.json
+
+# Override files
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Credentials and private keys
+.env
+*.pem
+*.key
+
+# Generated scan reports
+reports/*.json
+reports/*.sarif
+
+# Editor and operating-system files
+.vscode/
+.DS_Store
+Thumbs.db
