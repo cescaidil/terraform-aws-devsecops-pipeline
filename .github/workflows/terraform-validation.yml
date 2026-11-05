@@ -15,7 +15,7 @@ permissions:
 jobs:
   validate:
     name: Validate ${{ matrix.configuration }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     strategy:
       fail-fast: false
@@ -27,7 +27,7 @@ jobs:
 
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Install Terraform
         uses: hashicorp/setup-terraform@v4
