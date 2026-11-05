@@ -1,0 +1,49 @@
+Paste:
+name: Terraform Validation
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate ${{ matrix.configuration }}
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        configuration:
+          - baseline
+          - vulnerable
+          - hardened
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.16.1"
+          terraform_wrapper: false
+
+      - name: Check Terraform formatting
+        run: terraform fmt -check -recursive
+        working-directory: terraform/${{ matrix.configuration }}
+
+      - name: Initialise Terraform
+        run: terraform init -backend=false -input=false
+        working-directory: terraform/${{ matrix.configuration }}
+
+      - name: Validate Terraform
+        run: terraform validate -no-color
+        working-directory: terraform/${{ matrix.configuration }}
