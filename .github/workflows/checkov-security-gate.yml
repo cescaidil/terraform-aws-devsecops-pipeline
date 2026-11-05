@@ -1,0 +1,88 @@
+name: Checkov Security Gate
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      scan_target:
+        description: Configuration set to scan
+        required: true
+        default: hardened
+        type: choice
+        options:
+          - hardened
+          - vulnerable
+
+permissions:
+  contents: read
+
+jobs:
+  checkov:
+    name: Checkov ${{ matrix.test_case }}
+    runs-on: ubuntu-24.04
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - test_case: TC01 Public SSH
+            vulnerable_file: terraform/vulnerable/01-open-ssh.tf
+            hardened_file: terraform/hardened/01-restricted-ssh.tf
+            checks: CKV_AWS_24
+
+          - test_case: TC02 S3 Public Access
+            vulnerable_file: terraform/vulnerable/02-public-s3.tf
+            hardened_file: terraform/hardened/02-private-s3.tf
+            checks: CKV_AWS_53,CKV_AWS_54,CKV_AWS_55,CKV_AWS_56
+
+          - test_case: TC03 S3 KMS Encryption
+            vulnerable_file: terraform/vulnerable/03-sse-s3.tf
+            hardened_file: terraform/hardened/03-kms-s3.tf
+            checks: CKV_AWS_145
+
+          - test_case: TC04 EBS Encryption
+            vulnerable_file: terraform/vulnerable/04-unencrypted-ebs.tf
+            hardened_file: terraform/hardened/04-encrypted-ebs.tf
+            checks: CKV_AWS_3
+
+          - test_case: TC05 IMDSv2
+            vulnerable_file: terraform/vulnerable/05-imdsv1-enabled.tf
+            hardened_file: terraform/hardened/05-imdsv2-required.tf
+            checks: CKV_AWS_79
+
+          - test_case: TC06 IAM Least Privilege
+            vulnerable_file: terraform/vulnerable/06-wildcard-iam.tf
+            hardened_file: terraform/hardened/06-least-privilege-iam.tf
+            checks: CKV_AWS_63
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Select scan target
+        id: target
+        shell: bash
+        env:
+          SCAN_TARGET: ${{ github.event.inputs.scan_target || 'hardened' }}
+        run: |
+          if [ "$SCAN_TARGET" = "vulnerable" ]; then
+            echo "file=${{ matrix.vulnerable_file }}" >> "$GITHUB_OUTPUT"
+            echo "Scanning vulnerable configuration"
+          else
+            echo "file=${{ matrix.hardened_file }}" >> "$GITHUB_OUTPUT"
+            echo "Scanning hardened configuration"
+          fi
+
+      - name: Run targeted Checkov security gate
+        uses: bridgecrewio/checkov-action@v12.1347.0
+        with:
+          file: ${{ steps.target.outputs.file }}
+          framework: terraform
+          check: ${{ matrix.checks }}
+          quiet: false
+          soft_fail: false
